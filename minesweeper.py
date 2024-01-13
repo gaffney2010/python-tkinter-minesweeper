@@ -80,34 +80,37 @@ class Minesweeper(object):
         self.labels["flags"].grid(
             row=SIZE_X+1, column=int(SIZE_Y/2)-1, columnspan=int(SIZE_Y/2))  # bottom right
 
+        # create buttons
+        self.tiles = dict()
+        self.mines = N_MINES
+        for coord in grid_coords():
+            tile = Cell(
+                coord=coord,
+                button=tk.Button(self.frame, image=self.images["plain"]),
+            )
+            tile.button.bind(BTN_CLICK, self.on_click_wrapper(coord))
+            tile.button.bind(BTN_FLAG, self.on_right_click_wrapper(coord))
+            # offset by 1 row for timer
+            tile.button.grid(row=coord.x+1, column=coord.y)
+            self.tiles[coord] = tile
+
         self.restart()  # start game
         self.update_timer()  # init timer
 
-    def setup(self):
-        # create flag and clicked tile variables
+    def restart(self):
+        # reset flag and clicked tile variables
         self.flagCount = 0
         self.correctFlagCount = 0
         self.clickedCount = 0
         self.startTime = None
 
-        # create buttons
-        self.tiles = dict()
-        self.mines = N_MINES
+        # Draw as unclicked
         for coord in grid_coords():
-            # tile image changeable for debug reasons:
-            gfx = self.images["plain"]
-
-            tile = Cell(
-                coord=coord,
-                button=tk.Button(self.frame, image=gfx),
-            )
-
-            tile.button.bind(BTN_CLICK, self.on_click_wrapper(coord))
-            tile.button.bind(BTN_FLAG, self.on_right_click_wrapper(coord))
-            # offset by 1 row for timer
-            tile.button.grid(row=coord.x+1, column=coord.y)
-
-            self.tiles[coord] = tile
+            tile = self.tiles[coord]
+            tile.button.config(image=self.images["plain"])
+            tile.is_mine = False
+            tile.state = State.DEFAULT
+            tile.mines = 0
 
         # Assign mines now
         for coord in random.sample(list(grid_coords()), N_MINES):
@@ -120,8 +123,6 @@ class Minesweeper(object):
                 mc += 1 if n.is_mine else 0
             self.tiles[coord].mines = mc
 
-    def restart(self):
-        self.setup()
         self.refresh_labels()
 
     def refresh_labels(self):
