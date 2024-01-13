@@ -53,11 +53,10 @@ class Minesweeper(object):
         # import images
         self.images = {
             "plain": tk.PhotoImage(file="images/tile_plain.gif"),
-            "clicked": tk.PhotoImage(file="images/tile_clicked.gif"),
             "mine": tk.PhotoImage(file="images/tile_mine.gif"),
             "flag": tk.PhotoImage(file="images/tile_flag.gif"),
             "wrong": tk.PhotoImage(file="images/tile_wrong.gif"),
-            "numbers": []
+            "numbers": [tk.PhotoImage(file="images/tile_clicked.gif")],
         }
         for i in range(1, 9):
             self.images["numbers"].append(
@@ -193,12 +192,9 @@ class Minesweeper(object):
             return
 
         # change image
+        tile.button.config(image=self.images["numbers"][tile.mines])
         if tile.mines == 0:
-            tile.button.config(image=self.images["clicked"])
             self.clear_surrounding_tiles(tile.coord)
-        else:
-            tile.button.config(
-                image=self.images["numbers"][tile.mines-1])
         # if not already set as clicked, change state and count
         if tile.state != State.CLICKED:
             tile.state = State.CLICKED
@@ -245,12 +241,9 @@ class Minesweeper(object):
         if tile.state != State.DEFAULT:
             return
 
+        tile.button.config(image=self.images["numbers"][tile.mines])
         if tile.mines == 0:
-            tile.button.config(image=self.images["clicked"])
             queue.append(tile.coord)
-        else:
-            tile.button.config(
-                image=self.images["numbers"][tile.mines-1])
 
         tile.state = State.CLICKED
         self.clickedCount += 1
