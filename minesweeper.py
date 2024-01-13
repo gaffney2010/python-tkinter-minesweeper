@@ -1,5 +1,4 @@
 import collections
-from datetime import datetime
 import enum
 import itertools
 import platform
@@ -69,12 +68,9 @@ class Minesweeper(object):
 
         # set up labels/UI
         self.labels = {
-            "time": tk.Label(self.frame, text="00:00:00"),
             "mines": tk.Label(self.frame, text="Mines: 0"),
             "flags": tk.Label(self.frame, text="Flags: 0")
         }
-        self.labels["time"].grid(
-            row=0, column=0, columnspan=SIZE_Y)  # top full width
         self.labels["mines"].grid(
             row=SIZE_X+1, column=0, columnspan=int(SIZE_Y/2))  # bottom left
         self.labels["flags"].grid(
@@ -90,19 +86,16 @@ class Minesweeper(object):
             )
             tile.button.bind(BTN_CLICK, self.on_click_wrapper(coord))
             tile.button.bind(BTN_FLAG, self.on_right_click_wrapper(coord))
-            # offset by 1 row for timer
-            tile.button.grid(row=coord.x+1, column=coord.y)
+            tile.button.grid(row=coord.x, column=coord.y)
             self.tiles[coord] = tile
 
         self.restart()  # start game
-        self.update_timer()  # init timer
 
     def restart(self):
         # reset flag and clicked tile variables
         self.flagCount = 0
         self.correctFlagCount = 0
         self.clickedCount = 0
-        self.startTime = None
 
         # Draw as unclicked
         for coord in grid_coords():
@@ -147,16 +140,6 @@ class Minesweeper(object):
         else:
             self.tk.quit()
 
-    def update_timer(self):
-        ts = "00:00:00"
-        if self.startTime != None:
-            delta = datetime.now() - self.startTime
-            ts = str(delta).split('.')[0]  # drop ms
-            if delta.total_seconds() < 36000:
-                ts = "0" + ts  # zero-pad
-        self.labels["time"].config(text=ts)
-        self.frame.after(100, self.update_timer)
-
     def get_neighbors(self, coord: Coord):
         x, y = coord.x, coord.y
         neighbors = []
@@ -184,9 +167,6 @@ class Minesweeper(object):
         return lambda _: self.on_right_click(self.tiles[coord])
 
     def on_click(self, tile):
-        if self.startTime == None:
-            self.startTime = datetime.now()
-
         if tile.is_mine == True:
             # end game
             self.game_over(False)
@@ -204,9 +184,6 @@ class Minesweeper(object):
             self.game_over(True)
 
     def on_right_click(self, tile):
-        if self.startTime == None:
-            self.startTime = datetime.now()
-
         # if not clicked
         if tile.state == State.DEFAULT:
             tile.button.config(image=self.images["flag"])
