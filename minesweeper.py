@@ -4,13 +4,15 @@
 from tkinter import *
 from tkinter import messagebox as tkMessageBox
 from collections import deque
+import itertools
 import random
 import platform
 import time
 from datetime import time, date, datetime
 
-SIZE_X = 10
-SIZE_Y = 10
+SIZE_X = 16
+SIZE_Y = 30
+N_MINES = 99
 
 STATE_DEFAULT = 0
 STATE_CLICKED = 1
@@ -64,26 +66,20 @@ class Minesweeper:
 
         # create buttons
         self.tiles = dict({})
-        self.mines = 0
+        self.mines = N_MINES
         for x in range(0, SIZE_X):
             for y in range(0, SIZE_Y):
                 if y == 0:
                     self.tiles[x] = {}
 
                 id = str(x) + "_" + str(y)
-                isMine = False
 
                 # tile image changeable for debug reasons:
                 gfx = self.images["plain"]
 
-                # currently random amount of mines
-                if random.uniform(0.0, 1.0) < 0.1:
-                    isMine = True
-                    self.mines += 1
-
                 tile = {
                     "id": id,
-                    "isMine": isMine,
+                    "isMine": False,
                     "state": STATE_DEFAULT,
                     "coords": {
                         "x": x,
@@ -98,6 +94,10 @@ class Minesweeper:
                 tile["button"].grid( row = x+1, column = y ) # offset by 1 row for timer
 
                 self.tiles[x][y] = tile
+
+        # Assign mines now
+        for x, y in random.sample(list(itertools.product(range(SIZE_X), range(SIZE_Y))), N_MINES):
+            self.tiles[x][y]["isMine"] = True
 
         # loop again to find nearby mines and display number on tile
         for x in range(0, SIZE_X):
