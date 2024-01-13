@@ -1,5 +1,6 @@
 import collections
 from datetime import datetime
+import enum
 import itertools
 import platform
 import random
@@ -14,14 +15,16 @@ SIZE_X = 16
 SIZE_Y = 30
 N_MINES = 99
 
-STATE_DEFAULT = 0
-STATE_CLICKED = 1
-STATE_FLAGGED = 2
-
 BTN_CLICK = "<Button-1>"
 BTN_FLAG = "<Button-2>" if platform.system() == 'Darwin' else "<Button-3>"
 
 window = None
+
+
+class State(enum.Enum):
+    DEFAULT = 0
+    CLICKED = 1
+    FLAGGED = 2
 
 
 @attr.s(frozen=True)
@@ -33,6 +36,15 @@ class Coord(object):
 def grid_coords() -> Iterator[Coord]:
     for x, y in itertools.product(range(SIZE_X), range(SIZE_Y)):
         yield Coord(x, y)
+
+
+@attr.s()
+class Cell(object):
+    coord: Coord = attr.ib()
+    button: tk.Button = attr.ib()
+    is_mine: bool = attr.ib(default=False)
+    state: State = attr.ib(default=State.DEFAULT)
+    mines: int = attr.ib(default=0)
 
 
 class Minesweeper(object):
@@ -86,31 +98,28 @@ class Minesweeper(object):
             # tile image changeable for debug reasons:
             gfx = self.images["plain"]
 
-            tile = {
-                "isMine": False,
-                "state": STATE_DEFAULT,
-                "coords": coord,
-                "button": tk.Button(self.frame, image=gfx),
-                "mines": 0  # calculated after grid is built
-            }
+            tile = Cell(
+                coord=coord,
+                button=tk.Button(self.frame, image=gfx),
+            )
 
-            tile["button"].bind(BTN_CLICK, self.on_click_wrapper(coord))
-            tile["button"].bind(BTN_FLAG, self.on_right_click_wrapper(coord))
+            tile.button.bind(BTN_CLICK, self.on_click_wrapper(coord))
+            tile.button.bind(BTN_FLAG, self.on_right_click_wrapper(coord))
             # offset by 1 row for timer
-            tile["button"].grid(row=coord.x+1, column=coord.y)
+            tile.button.grid(row=coord.x+1, column=coord.y)
 
             self.tiles[coord] = tile
 
         # Assign mines now
         for coord in random.sample(list(grid_coords()), N_MINES):
-            self.tiles[coord]["isMine"] = True
+            self.tiles[coord].is_mine = True
 
         # loop again to find nearby mines and display number on tile
         for coord in grid_coords():
             mc = 0
             for n in self.get_neighbors(coord):
-                mc += 1 if n["isMine"] else 0
-            self.tiles[coord]["mines"] = mc
+                mc += 1 if n.is_mine else 0
+            self.tiles[coord].mines = mc
 
     def restart(self):
         self.setup()
@@ -122,11 +131,11 @@ class Minesweeper(object):
 
     def game_over(self, won):
         for coord in grid_coords():
-            if self.tiles[coord]["isMine"] == False and self.tiles[coord]["state"] == STATE_FLAGGED:
-                self.tiles[coord]["button"].config(
+            if self.tiles[coord].is_mine == False and self.tiles[coord].state == State.FLAGGED:
+                self.tiles[coord].button.config(
                     image=self.images["wrong"])
-            if self.tiles[coord]["isMine"] == True and self.tiles[coord]["state"] != STATE_FLAGGED:
-                self.tiles[coord]["button"].config(
+            if self.tiles[coord].is_mine == True and self.tiles[coord].state != State.FLAGGED:
+                self.tiles[coord].button.config(
                     image=self.images["mine"])
 
         self.tk.update()
@@ -178,21 +187,21 @@ class Minesweeper(object):
         if self.startTime == None:
             self.startTime = datetime.now()
 
-        if tile["isMine"] == True:
+        if tile.is_mine == True:
             # end game
             self.game_over(False)
             return
 
         # change image
-        if tile["mines"] == 0:
-            tile["button"].config(image=self.images["clicked"])
-            self.clear_surrounding_tiles(tile["coords"])
+        if tile.mines == 0:
+            tile.button.config(image=self.images["clicked"])
+            self.clear_surrounding_tiles(tile.coord)
         else:
-            tile["button"].config(
-                image=self.images["numbers"][tile["mines"]-1])
+            tile.button.config(
+                image=self.images["numbers"][tile.mines-1])
         # if not already set as clicked, change state and count
-        if tile["state"] != STATE_CLICKED:
-            tile["state"] = STATE_CLICKED
+        if tile.state != State.CLICKED:
+            tile.state = State.CLICKED
             self.clickedCount += 1
         if self.clickedCount == (SIZE_X * SIZE_Y) - self.mines:
             self.game_over(True)
@@ -202,23 +211,23 @@ class Minesweeper(object):
             self.startTime = datetime.now()
 
         # if not clicked
-        if tile["state"] == STATE_DEFAULT:
-            tile["button"].config(image=self.images["flag"])
-            tile["state"] = STATE_FLAGGED
-            tile["button"].unbind(BTN_CLICK)
+        if tile.state == State.DEFAULT:
+            tile.button.config(image=self.images["flag"])
+            tile.state = State.FLAGGED
+            tile.button.unbind(BTN_CLICK)
             # if a mine
-            if tile["isMine"] == True:
+            if tile.is_mine == True:
                 self.correctFlagCount += 1
             self.flagCount += 1
             self.refresh_labels()
         # if flagged, unflag
-        elif tile["state"] == 2:
-            tile["button"].config(image=self.images["plain"])
-            tile["state"] = 0
-            tile["button"].bind(BTN_CLICK, self.on_click_wrapper(
-                tile["coords"].x, tile["coords"].y))
+        elif tile.state == 2:
+            tile.button.config(image=self.images["plain"])
+            tile.state = 0
+            tile.button.bind(BTN_CLICK, self.on_click_wrapper(
+                tile.coord.x, tile.coord.y))
             # if a mine
-            if tile["isMine"] == True:
+            if tile.is_mine == True:
                 self.correctFlagCount -= 1
             self.flagCount -= 1
             self.refresh_labels()
@@ -233,17 +242,17 @@ class Minesweeper(object):
                 self.clear_tile(tile, queue)
 
     def clear_tile(self, tile, queue):
-        if tile["state"] != STATE_DEFAULT:
+        if tile.state != State.DEFAULT:
             return
 
-        if tile["mines"] == 0:
-            tile["button"].config(image=self.images["clicked"])
-            queue.append(tile["coords"])
+        if tile.mines == 0:
+            tile.button.config(image=self.images["clicked"])
+            queue.append(tile.coord)
         else:
-            tile["button"].config(
-                image=self.images["numbers"][tile["mines"]-1])
+            tile.button.config(
+                image=self.images["numbers"][tile.mines-1])
 
-        tile["state"] = STATE_CLICKED
+        tile.state = State.CLICKED
         self.clickedCount += 1
 
 
