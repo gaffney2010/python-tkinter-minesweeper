@@ -83,13 +83,10 @@ class Minesweeper(object):
         self.tiles = dict()
         self.mines = N_MINES
         for coord in grid_coords():
-            id = str(coord.x) + "_" + str(coord.y)
-
             # tile image changeable for debug reasons:
             gfx = self.images["plain"]
 
             tile = {
-                "id": id,
                 "isMine": False,
                 "state": STATE_DEFAULT,
                 "coords": coord,
@@ -189,7 +186,7 @@ class Minesweeper(object):
         # change image
         if tile["mines"] == 0:
             tile["button"].config(image=self.images["clicked"])
-            self.clear_surrounding_tiles(tile["id"])
+            self.clear_surrounding_tiles(tile["coords"])
         else:
             tile["button"].config(
                 image=self.images["numbers"][tile["mines"]-1])
@@ -226,16 +223,13 @@ class Minesweeper(object):
             self.flagCount -= 1
             self.refresh_labels()
 
-    def clear_surrounding_tiles(self, id):
-        queue = collections.deque([id])
+    def clear_surrounding_tiles(self, coord: Coord):
+        queue = collections.deque([coord])
 
         while len(queue) != 0:
-            key = queue.popleft()
-            parts = key.split("_")
-            x = int(parts[0])
-            y = int(parts[1])
+            coord = queue.popleft()
 
-            for tile in self.get_neighbors(Coord(x, y)):
+            for tile in self.get_neighbors(coord):
                 self.clear_tile(tile, queue)
 
     def clear_tile(self, tile, queue):
@@ -244,7 +238,7 @@ class Minesweeper(object):
 
         if tile["mines"] == 0:
             tile["button"].config(image=self.images["clicked"])
-            queue.append(tile["id"])
+            queue.append(tile["coords"])
         else:
             tile["button"].config(
                 image=self.images["numbers"][tile["mines"]-1])
