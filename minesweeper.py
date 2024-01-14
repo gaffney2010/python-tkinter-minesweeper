@@ -11,9 +11,8 @@ from typing import Dict, Iterator, Optional
 import attr
 
 
-# TODO: Switch X and Y
-SIZE_X = 16
-SIZE_Y = 30
+SIZE_X = 30
+SIZE_Y = 16
 N_MINES = 99
 
 BTN_CLICK = "<Button-1>"
@@ -96,22 +95,22 @@ class _Display(object):
         # set up labels/UI
         self.mines = tk.Label(self.frame)
         self.flags = tk.Label(self.frame)
-        self.mines.grid(row=SIZE_X+1, column=0,
-                        columnspan=int(SIZE_Y/2))  # bottom left
-        self.flags.grid(row=SIZE_X+1, column=int(SIZE_Y/2)-1,
-                        columnspan=int(SIZE_Y/2))  # bottom right
+        self.mines.grid(row=SIZE_Y+1, column=0,
+                        columnspan=int(SIZE_X/2))  # bottom left
+        self.flags.grid(row=SIZE_Y+1, column=int(SIZE_X/2)-1,
+                        columnspan=int(SIZE_X/2))  # bottom right
 
         self.cell_buttons: Dict[Coord, tk.Button] = dict()
         for coord in grid_coords():
             cell_button = tk.Button(self.frame)
             cell_button.bind(BTN_CLICK, click_callback(coord))
             cell_button.bind(BTN_FLAG, right_click_callback(coord))
-            cell_button.grid(row=coord.x, column=coord.y)
+            cell_button.grid(row=coord.y, column=coord.x)
             self.cell_buttons[coord] = cell_button
 
         self.restart_button = tk.Button(self.frame)
         self.restart_button.bind(BTN_CLICK, restart_callback)
-        self.restart_button.grid(row=SIZE_X+1, column=SIZE_Y//2)
+        self.restart_button.grid(row=SIZE_Y+1, column=SIZE_X//2)
         self.restart_button.config(image=self.images["mine"])
 
         # Minesweeper has to update this for the first time, will need to check None-ness
@@ -156,7 +155,7 @@ class _Display(object):
                 self.restart_button.config(image=self.images["plain"])
         self.state.lost = state.lost
 
-        # TODO: Do I need this?
+        # This reduces lag.
         self.tk.update()
 
 
@@ -191,7 +190,7 @@ class Minesweeper(object):
         for coord in random.sample(list(grid_coords()), N_MINES):
             self.board_state.grid[coord].is_mine = True
 
-        # Assign mines
+        # Count adjacent mines
         for coord in grid_coords():
             self.board_state.grid[coord].n_adj_mines = len(
                 [n for n in self.get_neighbors(coord) if n.is_mine])
