@@ -43,23 +43,23 @@ class Cell(object):
     coord: Coord = attr.ib()
     is_mine: bool = attr.ib(default=False)
     state: State = attr.ib(default=State.HIDDEN)
-    mines: int = attr.ib(default=0)
+    n_adj_mines: int = attr.ib(default=0)
 
     def __eq__(self, other: 'Cell') -> bool:
         if self.is_mine != other.is_mine:
             return False
         if self.state != other.state:
             return False
-        if self.mines != other.mines:
+        if self.n_adj_mines != other.n_adj_mines:
             return False
         return True
-    
+
     def copy(self) -> 'Cell':
         return Cell(
             coord=self.coord,
             is_mine=self.is_mine,
             state=self.state,
-            mines=self.mines,
+            n_adj_mines=self.n_adj_mines,
         )
 
 
@@ -127,7 +127,8 @@ class _Display(object):
             if cell.state == State.HIDDEN:
                 self.cell_buttons[coord].config(image=self.images["plain"])
             if cell.state == State.CLICKED:
-                self.cell_buttons[coord].config(image=self.images["numbers"][cell.mines])
+                self.cell_buttons[coord].config(
+                    image=self.images["numbers"][cell.n_adj_mines])
             if cell.state == State.FLAGGED:
                 self.cell_buttons[coord].config(image=self.images["flag"])
 
@@ -167,16 +168,14 @@ class Minesweeper(object):
             n_flags=0,
         )
 
-        # Assign mines now
+        # Assign mines
         for coord in random.sample(list(grid_coords()), N_MINES):
             self.board_state.grid[coord].is_mine = True
 
-        # loop again to find nearby mines and display number on cell
+        # Assign mines
         for coord in grid_coords():
-            mc = 0
-            for n in self.get_neighbors(coord):
-                mc += 1 if n.is_mine else 0
-            self.board_state.grid[coord].mines = mc
+            self.board_state.grid[coord].n_adj_mines = len(
+                [n for n in self.get_neighbors(coord) if n.is_mine])
 
         self.display.update(self.board_state)
 
@@ -194,19 +193,11 @@ class Minesweeper(object):
     def get_neighbors(self, coord: Coord):
         x, y = coord.x, coord.y
         neighbors = []
-        coords = [
-            Coord(x-1, y-1),
-            Coord(x-1, y),
-            Coord(x-1, y+1),
-            Coord(x, y-1),
-            Coord(x, y+1),
-            Coord(x+1, y-1),
-            Coord(x+1, y),
-            Coord(x+1, y+1),
-        ]
-        for coord in coords:
+        for dx, dy in itertools.product(range(-1, 2), range(-1, 2)):
+            if dx == 0 and dy == 0:
+                continue
             try:
-                neighbors.append(self.board_state.grid[coord])
+                neighbors.append(self.board_state.grid[Coord(x+dx, y+dy)])
             except KeyError:
                 pass
         return neighbors
@@ -219,32 +210,29 @@ class Minesweeper(object):
 
     def on_click(self, cell):
         if cell.state in (State.CLICKED, State.FLAGGED):
-            # Nothing to do here
             return
 
         if cell.is_mine:
-            # end game
-            self.game_over(False)
+            self.game_over(won=False)
             return
 
         cell.state = State.CLICKED
-        if cell.mines == 0:
-            self.clear_surrounding_cells(cell.coord)
-
         self.clickedCount += 1
         if self.clickedCount == (SIZE_X * SIZE_Y) - N_MINES:
             self.game_over(True)
+
+        # Check if there's more work to do.
+        if cell.n_adj_mines == 0:
+            self.clear_surrounding_cells(cell.coord)
 
         self.display.update(self.board_state)
 
     def on_right_click(self, cell):
         if cell.state in (State.CLICKED, State.FLAGGED):
-            # Nothing to do here
             return
 
         if not cell.is_mine:
-            # end game
-            self.game_over(False)
+            self.game_over(won=False)
             return
 
         cell.state = State.FLAGGED
@@ -266,7 +254,7 @@ class Minesweeper(object):
             return
 
         cell.state = State.CLICKED
-        if cell.mines == 0:
+        if cell.n_adj_mines == 0:
             queue.append(cell.coord)
         self.clickedCount += 1
 
