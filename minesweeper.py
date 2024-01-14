@@ -81,7 +81,7 @@ class _Display(object):
             "plain": tk.PhotoImage(file="images/tile_plain.gif"),
             "mine": tk.PhotoImage(file="images/tile_mine.gif"),
             "flag": tk.PhotoImage(file="images/tile_flag.gif"),
-            "wrong": tk.PhotoImage(file="images/cell_wrong.gif"),
+            "wrong": tk.PhotoImage(file="images/tile_wrong.gif"),
             "numbers": [tk.PhotoImage(file="images/tile_clicked.gif")],
         }
         for i in range(1, 9):
@@ -126,6 +126,10 @@ class _Display(object):
 
             self.state.grid[coord] = cell.copy()
 
+            if cell.state == State.MISCLICKED:
+                self.cell_buttons[coord].config(image=self.images["wrong"])
+                continue
+
             if state.game_over and cell.is_mine:
                 self.cell_buttons[coord].config(image=self.images["mine"])
                 continue
@@ -137,8 +141,6 @@ class _Display(object):
                     image=self.images["numbers"][cell.n_adj_mines])
             if cell.state == State.FLAGGED:
                 self.cell_buttons[coord].config(image=self.images["flag"])
-            if cell.state == State.MISCLICKED:
-                self.cell_buttons[coord].config(image=self.images["wrong"])
 
         if self.state.n_mines != state.n_mines:
             self.state.n_mines = state.n_mines
