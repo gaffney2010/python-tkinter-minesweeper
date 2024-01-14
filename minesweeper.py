@@ -71,7 +71,7 @@ class BoardState(object):
         factory=lambda: {c: None for c in grid_coords()})
     n_mines: Optional[int] = attr.ib(default=None)
     n_flags: Optional[int] = attr.ib(default=None)
-    game_over: bool = attr.ib(default=False)
+    lost: bool = attr.ib(default=False)
 
 
 class _Display(object):
@@ -118,10 +118,9 @@ class _Display(object):
         self.state = BoardState()
 
     def update(self, state: BoardState) -> None:
-        # TODO: Rewrite
         for coord, cell in state.grid.items():
-            if self.state.grid[coord] == cell and self.state.game_over == state.game_over:
-                # Nothing to update
+            if self.state.grid[coord] == cell and self.state.lost == state.lost:
+                # Nothing to update.  Whole board gets updated when lost changes; minimal inefficiency
                 continue
 
             self.state.grid[coord] = cell.copy()
@@ -130,7 +129,7 @@ class _Display(object):
                 self.cell_buttons[coord].config(image=self.images["wrong"])
                 continue
 
-            if state.game_over and cell.is_mine:
+            if state.lost and cell.is_mine:
                 self.cell_buttons[coord].config(image=self.images["mine"])
                 continue
 
@@ -150,7 +149,12 @@ class _Display(object):
             self.state.n_flags = state.n_flags
             self.flags.config(text=f"Flags: {state.n_flags}")
 
-        self.state.game_over = state.game_over
+        if self.state.lost != state.lost:
+            if state.lost:
+                self.restart_button.config(image=self.images["wrong"])
+            else:
+                self.restart_button.config(image=self.images["plain"])
+        self.state.lost = state.lost
 
         # TODO: Do I need this?
         self.tk.update()
@@ -174,6 +178,7 @@ class Minesweeper(object):
 
     def restart(self):
         self.clickedCount = 0
+        self.lost = False
 
         # Initialize State
         self.board_state = BoardState(
@@ -194,7 +199,9 @@ class Minesweeper(object):
         self.display.update(self.board_state)
 
     def game_over(self, won):
-        self.board_state.game_over = True
+        if not won:
+            # If they won, then we don't have to change any behavior
+            self.board_state.lost = True
         self.display.update(self.board_state)
 
     def get_neighbors(self, coord: Coord):
@@ -218,6 +225,8 @@ class Minesweeper(object):
     def on_click(self, cell):
         if cell.state in (State.CLICKED, State.FLAGGED):
             return
+        if self.board_state.lost:
+            return
 
         if cell.is_mine:
             cell.state = State.MISCLICKED
@@ -235,6 +244,8 @@ class Minesweeper(object):
 
     def on_right_click(self, cell):
         if cell.state in (State.CLICKED, State.FLAGGED):
+            return
+        if self.board_state.lost:
             return
 
         if not cell.is_mine:
