@@ -22,7 +22,7 @@ window = None
 
 
 class State(enum.Enum):
-    DEFAULT = 0
+    HIDDEN = 0
     CLICKED = 1
     FLAGGED = 2
 
@@ -42,7 +42,7 @@ def grid_coords() -> Iterator[Coord]:
 class Cell(object):
     coord: Coord = attr.ib()
     is_mine: bool = attr.ib(default=False)
-    state: State = attr.ib(default=State.DEFAULT)
+    state: State = attr.ib(default=State.HIDDEN)
     mines: int = attr.ib(default=0)
 
     def __eq__(self, other: 'Cell') -> bool:
@@ -80,12 +80,12 @@ class _Display(object):
             "mine": tk.PhotoImage(file="images/tile_mine.gif"),
             "flag": tk.PhotoImage(file="images/tile_flag.gif"),
             # TODO: Use for misplace flag
-            # "wrong": tk.PhotoImage(file="images/tile_wrong.gif"),
+            # "wrong": tk.PhotoImage(file="images/cell_wrong.gif"),
             "numbers": [tk.PhotoImage(file="images/tile_clicked.gif")],
         }
         for i in range(1, 9):
             self.images["numbers"].append(
-                tk.PhotoImage(file="images/tile_"+str(i)+".gif"))
+                tk.PhotoImage(file=f"images/tile_{i}.gif"))
 
         # set up frame
         self.tk = tk_obj
@@ -100,13 +100,13 @@ class _Display(object):
         self.flags.grid(row=SIZE_X+1, column=int(SIZE_Y/2)-1,
                         columnspan=int(SIZE_Y/2))  # bottom right
 
-        self.tile_buttons: Dict[Coord, tk.Button] = dict()
+        self.cell_buttons: Dict[Coord, tk.Button] = dict()
         for coord in grid_coords():
-            tile_button = tk.Button(self.frame)
-            tile_button.bind(BTN_CLICK, click_callback(coord))
-            tile_button.bind(BTN_FLAG, right_click_callback(coord))
-            tile_button.grid(row=coord.x, column=coord.y)
-            self.tile_buttons[coord] = tile_button
+            cell_button = tk.Button(self.frame)
+            cell_button.bind(BTN_CLICK, click_callback(coord))
+            cell_button.bind(BTN_FLAG, right_click_callback(coord))
+            cell_button.grid(row=coord.x, column=coord.y)
+            self.cell_buttons[coord] = cell_button
 
         # Minesweeper has to update this for the first time, will need to check None-ness
         self.state = BoardState()
@@ -121,15 +121,15 @@ class _Display(object):
             self.state.grid[coord] = cell.copy()
 
             if state.game_over and cell.is_mine:
-                self.tile_buttons[coord].config(image=self.images["mine"])
+                self.cell_buttons[coord].config(image=self.images["mine"])
                 continue
 
-            if cell.state == State.DEFAULT:
-                self.tile_buttons[coord].config(image=self.images["plain"])
+            if cell.state == State.HIDDEN:
+                self.cell_buttons[coord].config(image=self.images["plain"])
             if cell.state == State.CLICKED:
-                self.tile_buttons[coord].config(image=self.images["numbers"][cell.mines])
+                self.cell_buttons[coord].config(image=self.images["numbers"][cell.mines])
             if cell.state == State.FLAGGED:
-                self.tile_buttons[coord].config(image=self.images["flag"])
+                self.cell_buttons[coord].config(image=self.images["flag"])
 
         if self.state.n_mines != state.n_mines:
             self.state.n_mines = state.n_mines
@@ -171,7 +171,7 @@ class Minesweeper(object):
         for coord in random.sample(list(grid_coords()), N_MINES):
             self.board_state.grid[coord].is_mine = True
 
-        # loop again to find nearby mines and display number on tile
+        # loop again to find nearby mines and display number on cell
         for coord in grid_coords():
             mc = 0
             for n in self.get_neighbors(coord):
@@ -217,19 +217,19 @@ class Minesweeper(object):
     def on_right_click_wrapper(self, coord: Coord):
         return lambda _: self.on_right_click(self.board_state.grid[coord])
 
-    def on_click(self, tile):
-        if tile.state in (State.CLICKED, State.FLAGGED):
+    def on_click(self, cell):
+        if cell.state in (State.CLICKED, State.FLAGGED):
             # Nothing to do here
             return
 
-        if tile.is_mine:
+        if cell.is_mine:
             # end game
             self.game_over(False)
             return
 
-        tile.state = State.CLICKED
-        if tile.mines == 0:
-            self.clear_surrounding_tiles(tile.coord)
+        cell.state = State.CLICKED
+        if cell.mines == 0:
+            self.clear_surrounding_cells(cell.coord)
 
         self.clickedCount += 1
         if self.clickedCount == (SIZE_X * SIZE_Y) - N_MINES:
@@ -237,37 +237,37 @@ class Minesweeper(object):
 
         self.display.update(self.board_state)
 
-    def on_right_click(self, tile):
-        if tile.state in (State.CLICKED, State.FLAGGED):
+    def on_right_click(self, cell):
+        if cell.state in (State.CLICKED, State.FLAGGED):
             # Nothing to do here
             return
 
-        if not tile.is_mine:
+        if not cell.is_mine:
             # end game
             self.game_over(False)
             return
 
-        tile.state = State.FLAGGED
+        cell.state = State.FLAGGED
         self.board_state.n_flags += 1
 
         self.display.update(self.board_state)
 
-    def clear_surrounding_tiles(self, coord: Coord):
+    def clear_surrounding_cells(self, coord: Coord):
         queue = collections.deque([coord])
 
         while len(queue) != 0:
             coord = queue.popleft()
 
-            for tile in self.get_neighbors(coord):
-                self.clear_tile(tile, queue)
+            for cell in self.get_neighbors(coord):
+                self.clear_cell(cell, queue)
 
-    def clear_tile(self, tile, queue):
-        if tile.state != State.DEFAULT:
+    def clear_cell(self, cell, queue):
+        if cell.state != State.HIDDEN:
             return
 
-        tile.state = State.CLICKED
-        if tile.mines == 0:
-            queue.append(tile.coord)
+        cell.state = State.CLICKED
+        if cell.mines == 0:
+            queue.append(cell.coord)
         self.clickedCount += 1
 
 
