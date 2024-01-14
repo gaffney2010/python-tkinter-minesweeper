@@ -221,9 +221,7 @@ class Minesweeper(object):
         if self.clickedCount == (SIZE_X * SIZE_Y) - N_MINES:
             self.game_over(True)
 
-        # Check if there's more work to do.
-        if cell.n_adj_mines == 0:
-            self.clear_surrounding_cells(cell.coord)
+        autosolve(self, cell.coord)
 
         self.display.update(self.board_state)
 
@@ -240,23 +238,25 @@ class Minesweeper(object):
 
         self.display.update(self.board_state)
 
-    def clear_surrounding_cells(self, coord: Coord):
-        queue = collections.deque([coord])
 
-        while len(queue) != 0:
-            coord = queue.popleft()
+def autosolve(ms: Minesweeper, start: Coord) -> None:
+    if ms.board_state.grid[start].n_adj_mines > 0:
+        return
+    
+    queue = collections.deque([start])
 
-            for cell in self.get_neighbors(coord):
-                self.clear_cell(cell, queue)
+    while len(queue) != 0:
+        coord = queue.popleft()
 
-    def clear_cell(self, cell, queue):
-        if cell.state != State.HIDDEN:
-            return
+        for cell in ms.get_neighbors(coord):
+            if cell.state != State.HIDDEN:
+                continue
+            
+            if cell.n_adj_mines == 0:
+                queue.append(cell.coord)
 
-        cell.state = State.CLICKED
-        if cell.n_adj_mines == 0:
-            queue.append(cell.coord)
-        self.clickedCount += 1
+            cell.state = State.CLICKED
+            ms.clickedCount += 1
 
 
 def main():
