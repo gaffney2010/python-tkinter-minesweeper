@@ -11,6 +11,7 @@ from typing import Dict, Iterator, Optional
 import attr
 
 
+# TODO: Switch X and Y
 SIZE_X = 16
 SIZE_Y = 30
 N_MINES = 99
@@ -73,7 +74,7 @@ class BoardState(object):
 
 
 class _Display(object):
-    def __init__(self, tk_obj, click_callback, right_click_callback):
+    def __init__(self, tk_obj, click_callback, right_click_callback, restart_callback):
         # import images
         self.images = {
             "plain": tk.PhotoImage(file="images/tile_plain.gif"),
@@ -107,6 +108,11 @@ class _Display(object):
             cell_button.bind(BTN_FLAG, right_click_callback(coord))
             cell_button.grid(row=coord.x, column=coord.y)
             self.cell_buttons[coord] = cell_button
+
+        self.restart_button = tk.Button(self.frame)
+        self.restart_button.bind(BTN_CLICK, restart_callback)
+        self.restart_button.grid(row=SIZE_X+1, column=SIZE_Y//2)
+        self.restart_button.config(image=self.images["mine"])
 
         # Minesweeper has to update this for the first time, will need to check None-ness
         self.state = BoardState()
@@ -155,7 +161,11 @@ class Minesweeper(object):
     def __init__(self, tk_obj):
         self.tk = tk_obj
         self.display = Display(
-            tk_obj, self.on_click_wrapper, self.on_right_click_wrapper)
+            tk_obj,
+            self.on_click_wrapper,
+            self.on_right_click_wrapper,
+            lambda _: self.restart(),
+        )
         self.restart()  # start game
 
     def restart(self):
@@ -182,13 +192,6 @@ class Minesweeper(object):
     def game_over(self, won):
         self.board_state.game_over = True
         self.display.update(self.board_state)
-
-        msg = "You Win! Play again?" if won else "You Lose! Play again?"
-        res = messagebox.askyesno("Game Over", msg)
-        if res:
-            self.restart()
-        else:
-            self.tk.quit()
 
     def get_neighbors(self, coord: Coord):
         x, y = coord.x, coord.y
@@ -242,7 +245,7 @@ class Minesweeper(object):
 def autosolve(ms: Minesweeper, start: Coord) -> None:
     if ms.board_state.grid[start].n_adj_mines > 0:
         return
-    
+
     queue = collections.deque([start])
 
     while len(queue) != 0:
@@ -251,7 +254,7 @@ def autosolve(ms: Minesweeper, start: Coord) -> None:
         for cell in ms.get_neighbors(coord):
             if cell.state != State.HIDDEN:
                 continue
-            
+
             if cell.n_adj_mines == 0:
                 queue.append(cell.coord)
 
