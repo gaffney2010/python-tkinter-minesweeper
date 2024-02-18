@@ -7,7 +7,7 @@ import random
 import time
 import tkinter as tk
 from tkinter import messagebox
-from typing import Callable, Dict, Iterator, List, Optional
+from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 import attr
 
@@ -252,11 +252,16 @@ def get_neighbors(coord: Coord) -> Neighbors:
     return Neighbors(neighbors)
 
 
-def solve_constraint(coord: Coord) -> List[Action]:
+def get_variables_constraint(coord: Coord) -> Tuple[List[Coord], int]:
     variables = list(get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.HIDDEN))
     showing_num = ms().grid[coord].n_adj_mines
     flagged_mines = len(list(get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.FLAGGED)))
     constraint = showing_num - flagged_mines
+    return variables, constraint
+
+
+def solve_constraint(coord: Coord) -> List[Action]:
+    variables, constraint = get_variables_constraint(coord)
 
     if constraint == 0:
         return [Action(type=ActionType.CLEAR, coord=c) for c in variables]
@@ -267,8 +272,45 @@ def solve_constraint(coord: Coord) -> List[Action]:
     return []
 
 
+def powerset(iterable):
+    """Recipe from itertools
+    
+    powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+    """
+    s = list(iterable)
+    return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
+
+
+def solve_pair_of_constraints(x: Coord, y: Coord) -> List[Action]:
+    vx, cx = get_variables_constraint(x)
+    vy, cy = get_variables_constraint(y)
+    v = list(set(vx) | set(vy))
+    
+    # We can make this part more efficient later if we need to
+    valid = []
+    for s in powerset(v):
+        # s represents all the 1s, or mines
+        meet_x = len([t for t in vx if t in s]) == cx
+        meet_y = len([t for t in vy if t in s]) == cy
+        if meet_x and meet_y:
+            valid.append(s)
+
+    result = []
+    for t in v:
+        if all([t in s for s in valid]):
+            result.append(Action(type=ActionType.FLAG, coord=t))
+        if not any([t in s for s in valid]):
+            result.append(Action(type=ActionType.CLEAR, coord=t))
+
+    return result
+
+
 def solve_variable(coord: Coord) -> List[Action]:
-    return []
+    result = []
+    constraint_neighbors = list(get_neighbors(coord).filter(lambda c: ms().grid[c].state == State.CLICKED))
+    for x, y in itertools.combinations(constraint_neighbors, 2):
+        result += solve_pair_of_constraints(x, y)
+    return result
 
 
 def do(action: Action) -> bool:
@@ -303,9 +345,8 @@ def do(action: Action) -> bool:
 
 def my_append(queue, element):
     """Won't append if duplicate"""
-    for e in queue:
-        if e.x == element.x and e.y == element.y:
-            return
+    if element in queue:
+        return
     queue.append(element)
 
 
