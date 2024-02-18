@@ -4,6 +4,7 @@ import functools
 import itertools
 import platform
 import random
+import time
 import tkinter as tk
 from tkinter import messagebox
 from typing import Callable, Dict, Iterator, List, Optional
@@ -252,11 +253,18 @@ def get_neighbors(coord: Coord) -> Neighbors:
 
 
 def solve_constraint(coord: Coord) -> List[Action]:
-    result = []
-    if ms().grid[coord].n_adj_mines == 0:
-        for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.HIDDEN):
-            result.append(Action(type=ActionType.CLEAR, coord=c))
-    return result
+    variables = list(get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.HIDDEN))
+    showing_num = ms().grid[coord].n_adj_mines
+    flagged_mines = len(list(get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.FLAGGED)))
+    constraint = showing_num - flagged_mines
+
+    if constraint == 0:
+        return [Action(type=ActionType.CLEAR, coord=c) for c in variables]
+    
+    if constraint == len(variables):
+        return [Action(type=ActionType.FLAG, coord=c) for c in variables]
+
+    return []
 
 
 def solve_variable(coord: Coord) -> List[Action]:
@@ -293,6 +301,14 @@ def do(action: Action) -> bool:
     return False
 
 
+def my_append(queue, element):
+    """Won't append if duplicate"""
+    for e in queue:
+        if e.x == element.x and e.y == element.y:
+            return
+    queue.append(element)
+
+
 def solve(starting_action: Action) -> None:
     """Handles a click, then proceeds to clear as much of the board as it knows how."""
     if ms().lost:
@@ -309,12 +325,18 @@ def solve(starting_action: Action) -> None:
             coord = action.coord
             game_over |= do(action)
             if action.type == ActionType.CLEAR:
-                constraint_solvers.append(coord)
+                my_append(constraint_solvers, coord)
+                for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.CLICKED):
+                    my_append(constraint_solvers, c)
                 for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.HIDDEN):
-                    variable_solvers.append(c)
+                    my_append(variable_solvers, c)
             if action.type == ActionType.FLAG:
                 for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.CLICKED):
-                    constraint_solvers.append(c)
+                    my_append(constraint_solvers, c)
+
+        ms().display_update()
+        # ms().tk.update()
+        # time.sleep(0.5)
 
         if game_over:
             break
@@ -333,7 +355,8 @@ def solve(starting_action: Action) -> None:
     ms().display_update()
 
 
-if __name__ == "__main__":    
+if __name__ == "__main__":  
+    random.seed(100)  
     # create Tk instance
     window = tk.Tk()
     # set program title
