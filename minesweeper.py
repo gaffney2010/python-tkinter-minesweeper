@@ -46,11 +46,6 @@ class Action(object):
     coord: Coord = attr.ib()
 
 
-def grid_coords() -> Iterator[Coord]:
-    for x, y in itertools.product(range(SIZE_X), range(SIZE_Y)):
-        yield Coord(x, y)
-
-
 @attr.s()
 class Cell(object):
     coord: Coord = attr.ib()
@@ -203,50 +198,31 @@ class Minesweeper(object):
         self.restart()  # start game
 
     def restart(self):
-        self.clickedCount = 0
+        # Initialize state
+        self.clicked_count = 0
         self.lost = False
-
-        # Initialize State
-        self.board_state = BoardState(
-            grid={coord: Cell(coord=coord) for coord in grid_coords()},
-            n_mines=N_MINES,
-            n_flags=0,
-        )
+        self.grid={coord: Cell(coord=coord) for coord in grid_coords()}
+        self.n_mines=N_MINES
+        self.n_flags=0
 
         # Assign mines
         for coord in random.sample(list(grid_coords()), N_MINES):
-            self.board_state.grid[coord].is_mine = True
+            self.grid[coord].is_mine = True
 
         # Count adjacent mines
         for coord in grid_coords():
-            self.board_state.grid[coord].n_adj_mines = len(list(self.get_neighbors(coord).filter(lambda n: self.board_state.grid[n].is_mine)))
+            self.grid[coord].n_adj_mines = len(list(get_neighbors(coord).filter(lambda n: self.grid[n].is_mine)))
 
         self.display_update()
-
-    def grid(self, coord: Coord) -> Cell:
-        """Just shorthand"""
-        return self.board_state.grid[coord]
     
     def display_update(self) -> None:
         """More shorthand"""
-        self.display.update(self.board_state)
-
-    # TODO: Delete or move out of Minesweeper
-    def game_over(self, won):
-        if not won:
-            # If they won, then we don't have to change any behavior
-            self.board_state.lost = True
-        self.display_update()
-
-    # TODO: Delete or move out of Minesweeper
-    def get_neighbors(self, coord: Coord) -> Neighbors:
-        x, y = coord.x, coord.y
-        neighbors = []
-        for dx, dy in itertools.product(range(-1, 2), range(-1, 2)):
-            if dx == 0 and dy == 0:
-                continue
-            neighbors.append(Coord(x+dx, y+dy))
-        return Neighbors(neighbors)
+        self.display.update(BoardState(
+            grid=self.grid,
+            n_mines=self.n_mines,
+            n_flags=self.n_flags,
+            lost=self.lost,
+        ))
 
     def on_click_wrapper(self, coord: Coord):
         return lambda _: solve(Action(type=ActionType.CLEAR, coord=coord))
@@ -260,10 +236,25 @@ def ms() -> Minesweeper:
     return Minesweeper(window)
 
 
+def grid_coords() -> Iterator[Coord]:
+    for x, y in itertools.product(range(SIZE_X), range(SIZE_Y)):
+        yield Coord(x, y)
+
+
+def get_neighbors(coord: Coord) -> Neighbors:
+    x, y = coord.x, coord.y
+    neighbors = []
+    for dx, dy in itertools.product(range(-1, 2), range(-1, 2)):
+        if dx == 0 and dy == 0:
+            continue
+        neighbors.append(Coord(x+dx, y+dy))
+    return Neighbors(neighbors)
+
+
 def solve_constraint(coord: Coord) -> List[Action]:
     result = []
-    if ms().grid(coord).n_adj_mines == 0:
-        for c in ms().get_neighbors(coord).filter(lambda n: ms().grid(n).state == State.HIDDEN):
+    if ms().grid[coord].n_adj_mines == 0:
+        for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.HIDDEN):
             result.append(Action(type=ActionType.CLEAR, coord=c))
     return result
 
@@ -274,28 +265,27 @@ def solve_variable(coord: Coord) -> List[Action]:
 
 def do(action: Action) -> bool:
     """Returns true iff the game ends."""
-    cell = ms().grid(action.coord)
+    cell = ms().grid[action.coord]
     if cell.state in (State.CLICKED, State.FLAGGED):
         return False
     
     if action.type == ActionType.CLEAR:
         if cell.is_mine:
             cell.state = State.MISCLICKED
-            ms().game_over(won=False)
+            ms().lost = True
             return True
 
         cell.state = State.CLICKED
-        # TODO: Move to board_state
-        ms().clickedCount += 1
+        ms().clicked_count += 1
 
     elif action.type == ActionType.FLAG:
         if not cell.is_mine:
             cell.state = State.MISCLICKED
-            ms().game_over(won=False)
+            ms().lost = True
             return True
 
         cell.state = State.FLAGGED
-        ms().board_state.n_flags += 1
+        ms().n_flags += 1
 
     else:
         raise NotImplementedError(f"Unknown action type: {action.type}")
@@ -305,7 +295,7 @@ def do(action: Action) -> bool:
 
 def solve(starting_action: Action) -> None:
     """Handles a click, then proceeds to clear as much of the board as it knows how."""
-    if ms().board_state.lost:
+    if ms().lost:
         return
 
     actions = [starting_action]
@@ -320,10 +310,10 @@ def solve(starting_action: Action) -> None:
             game_over |= do(action)
             if action.type == ActionType.CLEAR:
                 constraint_solvers.append(coord)
-                for c in ms().get_neighbors(coord).filter(lambda n: ms().grid(n).state == State.HIDDEN):
+                for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.HIDDEN):
                     variable_solvers.append(c)
             if action.type == ActionType.FLAG:
-                for c in ms().get_neighbors(coord).filter(lambda n: ms().grid(n).state == State.CLICKED):
+                for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.CLICKED):
                     constraint_solvers.append(c)
 
         if game_over:
@@ -336,8 +326,9 @@ def solve(starting_action: Action) -> None:
             coord = variable_solvers.popleft()
             actions += solve_variable(coord)      
 
-    if ms().clickedCount == (SIZE_X * SIZE_Y) - N_MINES:
-        ms().game_over(True)
+    if ms().clicked_count == (SIZE_X * SIZE_Y) - N_MINES:
+        # This is the win condition, but currently we don't do anything.  Sorry.
+        pass
 
     ms().display_update()
 
