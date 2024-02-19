@@ -397,7 +397,9 @@ def calc_prob() -> None:
 
     nums = {c: 0 for c in all_variables}
     den = 0
+    a = 0
     while den < N_SIMS:
+        a += 1
         mines = set(random.sample(all_hidden, ms().n_mines - ms().n_flags))
         mines &= all_variables
         for v, c in all_constraints:
@@ -407,6 +409,7 @@ def calc_prob() -> None:
             den += 1
             for c in mines:
                 nums[c] += 1
+    print(a)
     for c, p in nums.items():
         ms().probs[c] = round(100 * p / den)
 
