@@ -19,6 +19,8 @@ N_MINES = 99
 BTN_CLICK = "<Button-1>"
 BTN_FLAG = "<Button-2>" if platform.system() == 'Darwin' else "<Button-3>"
 
+N_SIMS = 2
+
 window = None
 
 
@@ -76,6 +78,7 @@ class Cell(object):
 class BoardState(object):
     grid: Dict[Coord, Optional[Cell]] = attr.ib(
         factory=lambda: {c: None for c in grid_coords()})
+    probs: Dict[Coord, int] = attr.ib(factory=lambda: {c: None for c in grid_coords()})
     n_mines: Optional[int] = attr.ib(default=None)
     n_flags: Optional[int] = attr.ib(default=None)
     lost: bool = attr.ib(default=False)
@@ -109,8 +112,11 @@ class _Display(object):
                         columnspan=int(SIZE_X/2))  # bottom right
 
         self.cell_buttons: Dict[Coord, tk.Button] = dict()
+        self.cell_texts: Dict[Coord, str] = dict()
         for coord in grid_coords():
-            cell_button = tk.Button(self.frame)
+            self.cell_texts[coord] = ""
+            cell_button = tk.Button(
+                self.frame, text="", compound="center", font=("Helvetica", 8))
             cell_button.bind(BTN_CLICK, click_callback(coord))
             cell_button.bind(BTN_FLAG, right_click_callback(coord))
             cell_button.grid(row=coord.y, column=coord.x)
@@ -125,28 +131,50 @@ class _Display(object):
         self.state = BoardState()
 
     def update(self, state: BoardState) -> None:
+        for coord, prob in state.probs.items():
+            if prob is None:
+                continue
+            self.cell_texts[coord] = str(prob)
+
         for coord, cell in state.grid.items():
-            if self.state.grid[coord] == cell and self.state.lost == state.lost:
+            if self.state.grid[coord] == cell and self.state.lost == state.lost and self.state.probs[coord] == state.probs[coord]:
                 # Nothing to update.  Whole board gets updated when lost changes; minimal inefficiency
                 continue
 
             self.state.grid[coord] = cell.copy()
 
             if cell.state == State.MISCLICKED:
-                self.cell_buttons[coord].config(image=self.images["wrong"])
+                self.cell_texts[coord] = ""
+                self.cell_buttons[coord].config(image=self.images["wrong"],
+                                                text=self.cell_texts[coord],
+                                                )
                 continue
 
             if state.lost and cell.is_mine:
-                self.cell_buttons[coord].config(image=self.images["mine"])
+                self.cell_texts[coord] = ""
+                self.cell_buttons[coord].config(
+                    image=self.images["mine"],
+                    text=self.cell_texts[coord],
+                )
                 continue
 
             if cell.state == State.HIDDEN:
-                self.cell_buttons[coord].config(image=self.images["plain"])
-            if cell.state == State.CLICKED:
                 self.cell_buttons[coord].config(
-                    image=self.images["numbers"][cell.n_adj_mines])
+                    image=self.images["plain"],
+                    text=self.cell_texts[coord],
+                )
+            if cell.state == State.CLICKED:
+                self.cell_texts[coord] = ""
+                self.cell_buttons[coord].config(
+                    image=self.images["numbers"][cell.n_adj_mines],
+                    text=self.cell_texts[coord],
+                )
             if cell.state == State.FLAGGED:
-                self.cell_buttons[coord].config(image=self.images["flag"])
+                self.cell_texts[coord] = ""
+                self.cell_buttons[coord].config(
+                    image=self.images["flag"],
+                    text=self.cell_texts[coord],
+                )
 
         if self.state.n_mines != state.n_mines:
             self.state.n_mines = state.n_mines
@@ -202,9 +230,10 @@ class Minesweeper(object):
         # Initialize state
         self.clicked_count = 0
         self.lost = False
-        self.grid={coord: Cell(coord=coord) for coord in grid_coords()}
-        self.n_mines=N_MINES
-        self.n_flags=0
+        self.grid = {coord: Cell(coord=coord) for coord in grid_coords()}
+        self.probs = {coord: None for coord in grid_coords()}
+        self.n_mines = N_MINES
+        self.n_flags = 0
 
         # Assign mines
         for coord in random.sample(list(grid_coords()), N_MINES):
@@ -212,14 +241,16 @@ class Minesweeper(object):
 
         # Count adjacent mines
         for coord in grid_coords():
-            self.grid[coord].n_adj_mines = len(list(get_neighbors(coord).filter(lambda n: self.grid[n].is_mine)))
+            self.grid[coord].n_adj_mines = len(
+                list(get_neighbors(coord).filter(lambda n: self.grid[n].is_mine)))
 
         self.display_update()
-    
+
     def display_update(self) -> None:
         """More shorthand"""
         self.display.update(BoardState(
             grid=self.grid,
+            probs=self.probs,
             n_mines=self.n_mines,
             n_flags=self.n_flags,
             lost=self.lost,
@@ -237,9 +268,11 @@ def ms() -> Minesweeper:
     return Minesweeper(window)
 
 
-def grid_coords() -> Iterator[Coord]:
+def grid_coords() -> Neighbors:
+    result = []
     for x, y in itertools.product(range(SIZE_X), range(SIZE_Y)):
-        yield Coord(x, y)
+        result.append(Coord(x, y))
+    return Neighbors(result)
 
 
 def get_neighbors(coord: Coord) -> Neighbors:
@@ -253,9 +286,11 @@ def get_neighbors(coord: Coord) -> Neighbors:
 
 
 def get_variables_constraint(coord: Coord) -> Tuple[List[Coord], int]:
-    variables = list(get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.HIDDEN))
+    variables = list(get_neighbors(coord).filter(
+        lambda n: ms().grid[n].state == State.HIDDEN))
     showing_num = ms().grid[coord].n_adj_mines
-    flagged_mines = len(list(get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.FLAGGED)))
+    flagged_mines = len(list(get_neighbors(coord).filter(
+        lambda n: ms().grid[n].state == State.FLAGGED)))
     constraint = showing_num - flagged_mines
     return variables, constraint
 
@@ -265,7 +300,7 @@ def solve_constraint(coord: Coord) -> List[Action]:
 
     if constraint == 0:
         return [Action(type=ActionType.CLEAR, coord=c) for c in variables]
-    
+
     if constraint == len(variables):
         return [Action(type=ActionType.FLAG, coord=c) for c in variables]
 
@@ -274,7 +309,7 @@ def solve_constraint(coord: Coord) -> List[Action]:
 
 def powerset(iterable):
     """Recipe from itertools
-    
+
     powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
     """
     s = list(iterable)
@@ -285,7 +320,7 @@ def solve_pair_of_constraints(x: Coord, y: Coord) -> List[Action]:
     vx, cx = get_variables_constraint(x)
     vy, cy = get_variables_constraint(y)
     v = list(set(vx) | set(vy))
-    
+
     # We can make this part more efficient later if we need to
     valid = []
     for s in powerset(v):
@@ -307,7 +342,8 @@ def solve_pair_of_constraints(x: Coord, y: Coord) -> List[Action]:
 
 def solve_variable(coord: Coord) -> List[Action]:
     result = []
-    constraint_neighbors = list(get_neighbors(coord).filter(lambda c: ms().grid[c].state == State.CLICKED))
+    constraint_neighbors = list(get_neighbors(coord).filter(
+        lambda c: ms().grid[c].state == State.CLICKED))
     for x, y in itertools.combinations(constraint_neighbors, 2):
         result += solve_pair_of_constraints(x, y)
     return result
@@ -318,7 +354,7 @@ def do(action: Action) -> bool:
     cell = ms().grid[action.coord]
     if cell.state in (State.CLICKED, State.FLAGGED):
         return False
-    
+
     if action.type == ActionType.CLEAR:
         if cell.is_mine:
             cell.state = State.MISCLICKED
@@ -339,7 +375,7 @@ def do(action: Action) -> bool:
 
     else:
         raise NotImplementedError(f"Unknown action type: {action.type}")
-    
+
     return False
 
 
@@ -348,6 +384,31 @@ def my_append(queue, element):
     if element in queue:
         return
     queue.append(element)
+
+
+def calc_prob() -> None:
+    all_hidden = list(grid_coords().filter(lambda c: ms().grid[c].state == State.HIDDEN))
+    all_constraints = [get_variables_constraint(c) for c in grid_coords().filter(lambda c: ms().grid[c].state == State.CLICKED)]
+    all_constraints = [(set(v), c) for v, c in all_constraints if len(v) > 0]
+    all_variables = set()
+    for x in all_constraints:
+        for xi in x[0]:
+            all_variables.add(xi)
+
+    nums = {c: 0 for c in all_variables}
+    den = 0
+    while den < N_SIMS:
+        mines = set(random.sample(all_hidden, ms().n_mines - ms().n_flags))
+        mines &= all_variables
+        for v, c in all_constraints:
+            if len(mines & v) != c:
+                break
+        else:
+            den += 1
+            for c in mines:
+                nums[c] += 1
+    for c, p in nums.items():
+        ms().probs[c] = round(100 * p / den)
 
 
 def solve(starting_action: Action) -> None:
@@ -375,9 +436,9 @@ def solve(starting_action: Action) -> None:
                 for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.CLICKED):
                     my_append(constraint_solvers, c)
 
-        ms().display_update()
+        # ms().display_update()
         # ms().tk.update()
-        # time.sleep(0.5)
+        # time.sleep(2)
 
         if game_over:
             break
@@ -387,17 +448,19 @@ def solve(starting_action: Action) -> None:
             actions += solve_constraint(coord)
         elif variable_solvers:
             coord = variable_solvers.popleft()
-            actions += solve_variable(coord)      
+            actions += solve_variable(coord)
 
     if ms().clicked_count == (SIZE_X * SIZE_Y) - N_MINES:
         # This is the win condition, but currently we don't do anything.  Sorry.
         pass
 
+    calc_prob()
+
     ms().display_update()
 
 
-if __name__ == "__main__":  
-    random.seed(100)  
+if __name__ == "__main__":
+    random.seed(100)
     # create Tk instance
     window = tk.Tk()
     # set program title
