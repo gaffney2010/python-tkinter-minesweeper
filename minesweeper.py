@@ -2,6 +2,7 @@ import collections
 import enum
 import functools
 import itertools
+import math
 import platform
 import random
 import time
@@ -19,7 +20,7 @@ N_MINES = 99
 BTN_CLICK = "<Button-1>"
 BTN_FLAG = "<Button-2>" if platform.system() == 'Darwin' else "<Button-3>"
 
-N_SIMS = 2
+N_SIMS = 10
 
 window = None
 
@@ -390,18 +391,24 @@ def calc_prob() -> None:
     all_hidden = list(grid_coords().filter(lambda c: ms().grid[c].state == State.HIDDEN))
     all_constraints = [get_variables_constraint(c) for c in grid_coords().filter(lambda c: ms().grid[c].state == State.CLICKED)]
     all_constraints = [(set(v), c) for v, c in all_constraints if len(v) > 0]
+    all_constraints.sort(key=lambda x: -len(x[0]))
     all_variables = set()
     for x in all_constraints:
         for xi in x[0]:
             all_variables.add(xi)
 
+    out = ms().n_mines - ms().n_flags
+    tot = len(all_hidden)
+    sz = len(all_variables)
+    prob_mines = list()
+    for i in range(sz+1):
+        prob_mines.append(math.comb(sz, i) * math.comb(tot-sz, out-i) / math.comb(tot, out))
+
     nums = {c: 0 for c in all_variables}
     den = 0
-    a = 0
     while den < N_SIMS:
-        a += 1
-        mines = set(random.sample(all_hidden, ms().n_mines - ms().n_flags))
-        mines &= all_variables
+        n = random.choices(list(range(sz+1)), weights=prob_mines)[0]
+        mines = set(random.sample(all_variables, n))
         for v, c in all_constraints:
             if len(mines & v) != c:
                 break
@@ -409,7 +416,6 @@ def calc_prob() -> None:
             den += 1
             for c in mines:
                 nums[c] += 1
-    print(a)
     for c, p in nums.items():
         ms().probs[c] = round(100 * p / den)
 
