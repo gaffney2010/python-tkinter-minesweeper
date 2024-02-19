@@ -342,11 +342,31 @@ def solve_pair_of_constraints(x: Coord, y: Coord) -> List[Action]:
 
 
 def solve_variable(coord: Coord) -> List[Action]:
-    result = []
     constraint_neighbors = list(get_neighbors(coord).filter(
         lambda c: ms().grid[c].state == State.CLICKED))
-    for x, y in itertools.combinations(constraint_neighbors, 2):
-        result += solve_pair_of_constraints(x, y)
+    
+    vcs = [get_variables_constraint(x) for x in constraint_neighbors]
+    v_set = set()
+    for v, _ in vcs:
+        v_set |= set(v)
+    
+    # We can make this part more efficient later if we need to
+    valid = []
+    for s in powerset(v_set):
+        # s represents all the 1s, or mines
+        for v, c in vcs:
+            if len([t for t in v if t in s]) != c:
+                break
+        else:
+            valid.append(s)
+
+    result = []
+    for t in v:
+        if all([t in s for s in valid]):
+            result.append(Action(type=ActionType.FLAG, coord=t))
+        if not any([t in s for s in valid]):
+            result.append(Action(type=ActionType.CLEAR, coord=t))
+
     return result
 
 
