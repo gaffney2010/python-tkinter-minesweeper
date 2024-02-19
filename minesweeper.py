@@ -361,7 +361,7 @@ def solve_variable(coord: Coord) -> List[Action]:
             valid.append(s)
 
     result = []
-    for t in v:
+    for t in v_set:
         if all([t in s for s in valid]):
             result.append(Action(type=ActionType.FLAG, coord=t))
         if not any([t in s for s in valid]):
