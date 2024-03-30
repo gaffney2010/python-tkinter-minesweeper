@@ -1,10 +1,11 @@
+import argparse
 import collections
 import functools
 import itertools
 import math
 import random
 import tkinter as tk
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 from minesweeper_lib import *
 
@@ -12,36 +13,23 @@ from minesweeper_lib import *
 window = None
 
 
-def left_click(coord: Coord):
-    return lambda _: solve(Action(type=ActionType.CLEAR, coord=coord))
+def click(_, action_type: ActionType, coord: Coord, ms: Minesweeper, display_updater: Callable) -> None:
+    solve(Action(type=action_type, coord=coord), ms)
+    display_updater()
 
 
-def right_click(coord: Coord):
-    return lambda _: solve(Action(type=ActionType.FLAG, coord=coord))
-
-
-@functools.lru_cache(1)
-def ms() -> Minesweeper:
-    display = Display(
-        window,
-        left_click,
-        right_click,
-    )
-    return Minesweeper(display, list(random.sample(list(grid_coords()), N_MINES)))
-
-
-def get_variables_constraint(coord: Coord) -> Tuple[List[Coord], int]:
+def get_variables_constraint(coord: Coord, ms: Minesweeper) -> Tuple[List[Coord], int]:
     variables = list(get_neighbors(coord).filter(
-        lambda n: ms().grid[n].state == State.HIDDEN))
-    showing_num = ms().grid[coord].n_adj_mines
+        lambda n: ms.grid[n].state == State.HIDDEN))
+    showing_num = ms.grid[coord].n_adj_mines
     flagged_mines = len(list(get_neighbors(coord).filter(
-        lambda n: ms().grid[n].state == State.FLAGGED)))
+        lambda n: ms.grid[n].state == State.FLAGGED)))
     constraint = showing_num - flagged_mines
     return variables, constraint
 
 
-def solve_constraint(coord: Coord) -> List[Action]:
-    variables, constraint = get_variables_constraint(coord)
+def solve_constraint(coord: Coord, ms: Minesweeper) -> List[Action]:
+    variables, constraint = get_variables_constraint(coord, ms)
 
     if constraint == 0:
         return [Action(type=ActionType.CLEAR, coord=c) for c in variables]
@@ -61,35 +49,11 @@ def powerset(iterable):
     return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
 
 
-def solve_pair_of_constraints(x: Coord, y: Coord) -> List[Action]:
-    vx, cx = get_variables_constraint(x)
-    vy, cy = get_variables_constraint(y)
-    v = list(set(vx) | set(vy))
-
-    # We can make this part more efficient later if we need to
-    valid = []
-    for s in powerset(v):
-        # s represents all the 1s, or mines
-        meet_x = len([t for t in vx if t in s]) == cx
-        meet_y = len([t for t in vy if t in s]) == cy
-        if meet_x and meet_y:
-            valid.append(s)
-
-    result = []
-    for t in v:
-        if all([t in s for s in valid]):
-            result.append(Action(type=ActionType.FLAG, coord=t))
-        if not any([t in s for s in valid]):
-            result.append(Action(type=ActionType.CLEAR, coord=t))
-
-    return result
-
-
-def solve_variable(coord: Coord) -> List[Action]:
+def solve_variable(coord: Coord, ms: Minesweeper) -> List[Action]:
     constraint_neighbors = list(get_neighbors(coord).filter(
-        lambda c: ms().grid[c].state == State.CLICKED))
+        lambda c: ms.grid[c].state == State.CLICKED))
 
-    vcs = [get_variables_constraint(x) for x in constraint_neighbors]
+    vcs = [get_variables_constraint(x, ms) for x in constraint_neighbors]
     v_set = set()
     for v, _ in vcs:
         v_set |= set(v)
@@ -114,29 +78,29 @@ def solve_variable(coord: Coord) -> List[Action]:
     return result
 
 
-def do(action: Action) -> bool:
+def do(action: Action, ms: Minesweeper) -> bool:
     """Returns true iff the game ends."""
-    cell = ms().grid[action.coord]
+    cell = ms.grid[action.coord]
     if cell.state in (State.CLICKED, State.FLAGGED):
         return False
 
     if action.type == ActionType.CLEAR:
         if cell.is_mine:
             cell.state = State.MISCLICKED
-            ms().lost = True
+            ms.lost = True
             return True
 
         cell.state = State.CLICKED
-        ms().clicked_count += 1
+        ms.clicked_count += 1
 
     elif action.type == ActionType.FLAG:
         if not cell.is_mine:
             cell.state = State.MISCLICKED
-            ms().lost = True
+            ms.lost = True
             return True
 
         cell.state = State.FLAGGED
-        ms().n_flags += 1
+        ms.n_flags += 1
 
     else:
         raise NotImplementedError(f"Unknown action type: {action.type}")
@@ -151,11 +115,11 @@ def my_append(queue, element):
     queue.append(element)
 
 
-def calc_prob() -> None:
+def calc_prob(ms: Minesweeper) -> None:
     all_hidden = list(grid_coords().filter(
-        lambda c: ms().grid[c].state == State.HIDDEN))
-    all_constraints = [get_variables_constraint(c) for c in grid_coords().filter(
-        lambda c: ms().grid[c].state == State.CLICKED)]
+        lambda c: ms.grid[c].state == State.HIDDEN))
+    all_constraints = [get_variables_constraint(c, ms) for c in grid_coords().filter(
+        lambda c: ms.grid[c].state == State.CLICKED)]
     all_constraints = [(set(v), c) for v, c in all_constraints if len(v) > 0]
     all_constraints.sort(key=lambda x: -len(x[0]))
     all_variables = set()
@@ -163,7 +127,7 @@ def calc_prob() -> None:
         for xi in x[0]:
             all_variables.add(xi)
 
-    out = ms().n_mines - ms().n_flags
+    out = ms.n_mines - ms.n_flags
     tot = len(all_hidden)
     sz = len(all_variables)
     prob_mines = list()
@@ -183,13 +147,13 @@ def calc_prob() -> None:
             den += 1
             for c in mines:
                 nums[c] += 1
-    for c, p in nums.items():
-        ms().probs[c] = round(100 * p / den)
+    for c, p in nums.items:
+        ms.probs[c] = round(100 * p / den)
 
 
-def solve(starting_action: Action) -> None:
+def solve(starting_action: Action, ms: Minesweeper) -> Minesweeper:
     """Handles a click, then proceeds to clear as much of the board as it knows how."""
-    if ms().lost:
+    if ms.lost:
         return
 
     actions = [starting_action]
@@ -201,19 +165,18 @@ def solve(starting_action: Action) -> None:
         while actions:
             action = actions.pop()
             coord = action.coord
-            game_over |= do(action)
+            game_over |= do(action, ms)
             if action.type == ActionType.CLEAR:
                 my_append(constraint_solvers, coord)
-                for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.CLICKED):
+                for c in get_neighbors(coord).filter(lambda n: ms.grid[n].state == State.CLICKED):
                     my_append(constraint_solvers, c)
-                for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.HIDDEN):
+                for c in get_neighbors(coord).filter(lambda n: ms.grid[n].state == State.HIDDEN):
                     my_append(variable_solvers, c)
             if action.type == ActionType.FLAG:
-                for c in get_neighbors(coord).filter(lambda n: ms().grid[n].state == State.CLICKED):
+                for c in get_neighbors(coord).filter(lambda n: ms.grid[n].state == State.CLICKED):
                     my_append(constraint_solvers, c)
 
-        # ms().display_update()
-        # ms().tk.update()
+        # ms.tk.update()
         # time.sleep(2)
 
         if game_over:
@@ -221,27 +184,38 @@ def solve(starting_action: Action) -> None:
 
         if constraint_solvers:
             coord = constraint_solvers.popleft()
-            actions += solve_constraint(coord)
+            actions += solve_constraint(coord, ms)
         elif variable_solvers:
             coord = variable_solvers.popleft()
-            actions += solve_variable(coord)
+            actions += solve_variable(coord, ms)
 
-    if ms().clicked_count == (SIZE_X * SIZE_Y) - N_MINES:
+    if ms.clicked_count == (SIZE_X * SIZE_Y) - N_MINES:
         # This is the win condition, but currently we don't do anything.  Sorry.
         pass
 
-    # calc_prob()
+    # calc_prob(ms)
 
-    ms().display_update()
+    return ms
 
 
 if __name__ == "__main__":
-    random.seed(100)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--board_num')
+    args = vars(parser.parse_args())
+    board_num = args["board_num"]
+
     # create Tk instance
     window = tk.Tk()
     # set program title
     window.title("Minesweeper")
-    # create game instance
-    _ = ms()
+
+    ms = Minesweeper(list(random.sample(list(grid_coords()), N_MINES)))
+    _ = Display(
+        window,
+        ms,
+        functools.partial(click, action_type=ActionType.CLEAR),
+        functools.partial(click, action_type=ActionType.FLAG),
+    )
+
     # run event loop
     window.mainloop()

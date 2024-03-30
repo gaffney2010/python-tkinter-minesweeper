@@ -80,7 +80,7 @@ class BoardState(object):
 
 
 class _Display(object):
-    def __init__(self, tk_obj, click_callback, right_click_callback):
+    def __init__(self, tk_obj, ms, click_callback, right_click_callback):
         # import images
         self.images = {
             "plain": tk.PhotoImage(file="images/tile_plain.gif"),
@@ -95,6 +95,7 @@ class _Display(object):
 
         # set up frame
         self.tk = tk_obj
+        self.ms = ms
         self.frame = tk.Frame(self.tk)
         self.frame.pack()
 
@@ -112,8 +113,8 @@ class _Display(object):
             self.cell_texts[coord] = ""
             cell_button = tk.Button(
                 self.frame, text="", compound="center", font=("Helvetica", 8))
-            cell_button.bind(BTN_CLICK, click_callback(coord))
-            cell_button.bind(BTN_FLAG, right_click_callback(coord))
+            cell_button.bind(BTN_CLICK, functools.partial(click_callback, coord=coord, ms=self.ms, display_updater=self.update))
+            cell_button.bind(BTN_FLAG, functools.partial(right_click_callback, coord=coord, ms=self.ms, display_updater=self.update))
             cell_button.grid(row=coord.y, column=coord.x)
             self.cell_buttons[coord] = cell_button
 
@@ -124,14 +125,16 @@ class _Display(object):
         # Minesweeper has to update this for the first time, will need to check None-ness
         self.state = BoardState()
 
-    def update(self, state: BoardState) -> None:
-        for coord, prob in state.probs.items():
+        self.update()
+
+    def update(self) -> None:
+        for coord, prob in self.ms.probs.items():
             if prob is None:
                 continue
             self.cell_texts[coord] = str(prob)
 
-        for coord, cell in state.grid.items():
-            if self.state.grid[coord] == cell and self.state.lost == state.lost and self.state.probs[coord] == state.probs[coord]:
+        for coord, cell in self.ms.grid.items():
+            if self.state.grid[coord] == cell and self.state.lost == self.ms.lost and self.state.probs[coord] == self.ms.probs[coord]:
                 # Nothing to update.  Whole board gets updated when lost changes; minimal inefficiency
                 continue
 
@@ -144,7 +147,7 @@ class _Display(object):
                                                 )
                 continue
 
-            if state.lost and cell.is_mine:
+            if self.ms.lost and cell.is_mine:
                 self.cell_texts[coord] = ""
                 self.cell_buttons[coord].config(
                     image=self.images["mine"],
@@ -170,20 +173,20 @@ class _Display(object):
                     text=self.cell_texts[coord],
                 )
 
-        if self.state.n_mines != state.n_mines:
-            self.state.n_mines = state.n_mines
-            self.mines.config(text=f"Mines: {state.n_mines}")
+        if self.state.n_mines != self.ms.n_mines:
+            self.state.n_mines = self.ms.n_mines
+            self.mines.config(text=f"Mines: {self.ms.n_mines}")
 
-        if self.state.n_flags != state.n_flags:
-            self.state.n_flags = state.n_flags
-            self.flags.config(text=f"Flags: {state.n_flags}")
+        if self.state.n_flags != self.ms.n_flags:
+            self.state.n_flags = self.ms.n_flags
+            self.flags.config(text=f"Flags: {self.ms.n_flags}")
 
-        if self.state.lost != state.lost:
-            if state.lost:
+        if self.state.lost != self.ms.lost:
+            if self.ms.lost:
                 self.restart_button.config(image=self.images["wrong"])
             else:
                 self.restart_button.config(image=self.images["plain"])
-        self.state.lost = state.lost
+        self.state.lost = self.ms.lost
 
 
 @functools.lru_cache(1)
@@ -227,9 +230,7 @@ def get_neighbors(coord: Coord) -> Neighbors:
 
 
 class Minesweeper(object):
-    def __init__(self, display, mines: List[Coord]):
-        self.display = display
-
+    def __init__(self, mines: List[Coord]):
         # Initialize state
         self.clicked_count = 0
         self.lost = False
@@ -246,15 +247,3 @@ class Minesweeper(object):
         for coord in grid_coords():
             self.grid[coord].n_adj_mines = len(
                 list(get_neighbors(coord).filter(lambda n: self.grid[n].is_mine)))
-
-        self.display_update()
-
-    def display_update(self) -> None:
-        """More shorthand"""
-        self.display.update(BoardState(
-            grid=self.grid,
-            probs=self.probs,
-            n_mines=self.n_mines,
-            n_flags=self.n_flags,
-            lost=self.lost,
-        ))
