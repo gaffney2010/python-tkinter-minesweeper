@@ -8,6 +8,7 @@ import tkinter as tk
 from typing import Callable, List, Tuple
 
 from minesweeper_lib import *
+import data_lib
 
 
 window = None
@@ -199,17 +200,26 @@ def solve(starting_action: Action, ms: Minesweeper) -> Minesweeper:
 
 
 if __name__ == "__main__":
+    data_lib.make_tables()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--board_num')
     args = vars(parser.parse_args())
     board_num = args["board_num"]
 
+    bv = data_lib.read_board(board_num)
+    if not bv:
+        bv = data_lib.BoardValue(
+            mines=list(random.sample(list(grid_coords()), N_MINES)),
+        )
+        data_lib.write_board(board_num, bv)
+        
     # create Tk instance
     window = tk.Tk()
     # set program title
     window.title("Minesweeper")
 
-    ms = Minesweeper(list(random.sample(list(grid_coords()), N_MINES)))
+    ms = Minesweeper(bv.mines)
     _ = Display(
         window,
         ms,
