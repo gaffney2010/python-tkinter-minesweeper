@@ -14,8 +14,13 @@ import data_lib
 window = None
 
 
-def click(_, action_type: ActionType, coord: Coord, ms: Minesweeper, display_updater: Callable) -> None:
+def click(_, action_type: ActionType, coord: Coord, ms: Minesweeper, display_updater: Callable, board_num: int) -> None:
     solve(Action(type=action_type, coord=coord), ms)
+    data_lib.write_board_position(
+        board_num=board_num,
+        position_hash=data_lib.position_hash(ms),
+        value=data_lib.board_position_from_ms(ms),
+    )
     display_updater()
 
 
@@ -213,7 +218,7 @@ if __name__ == "__main__":
             mines=list(random.sample(list(grid_coords()), N_MINES)),
         )
         data_lib.write_board(board_num, bv)
-        
+
     # create Tk instance
     window = tk.Tk()
     # set program title
@@ -223,8 +228,8 @@ if __name__ == "__main__":
     _ = Display(
         window,
         ms,
-        functools.partial(click, action_type=ActionType.CLEAR),
-        functools.partial(click, action_type=ActionType.FLAG),
+        functools.partial(click, action_type=ActionType.CLEAR, board_num=board_num),
+        functools.partial(click, action_type=ActionType.FLAG, board_num=board_num),
     )
 
     # run event loop

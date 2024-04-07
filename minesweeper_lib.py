@@ -247,3 +247,9 @@ class Minesweeper(object):
         for coord in grid_coords():
             self.grid[coord].n_adj_mines = len(
                 list(get_neighbors(coord).filter(lambda n: self.grid[n].is_mine)))
+            
+    def update_grid(self, clears: List[Coord], flags: List[Coord]) -> None:
+        for c in clears:
+            self.grid[c].state == State.CLICKED
+        for f in flags:
+            self.grid[c].state == State.FLAGGED
